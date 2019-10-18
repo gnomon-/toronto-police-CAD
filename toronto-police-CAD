@@ -1,51 +1,56 @@
 #!/bin/bash
 
+# - https://toronto.ctvnews.ca/male-victim-injured-after-shooting-in-west-end-1.4645024
+# - https://twitter.com/hashtag/GO2011710
+# - http://c4s.torontopolice.on.ca/
+# - https://www.hexagonsafetyinfrastructure.com/case-studies/tps-integrates-location-and-navigation-using-mobile-cad
+# - https://developers.arcgis.com/rest/users-groups-and-items/common-parameters.htm
+# - http://resources.esri.com/help/9.3/arcgisserver/apis/rest/index-9-3.html?query.html
+# - https://gist.github.com/patcon/955c62fbaed50bbdd9cf3e34acb170b2
+# - https://github.com/patcon
+# - https://github.com/gnomon-/toronto-fire-CAD
+
 declare -i now aft ret sleep
-declare    fn # etag
+declare    dir_data fn dstdir tmpdir tmp_suff
+declare -a opts_{curl,tps,ephemeral}
 
-sleep=$((60 * 1))
+dir_data=/home/gnomon/.toronto-police-CAD
+fn='calls-for-service'
+tmp_suff='.in_use'
 
-while true ; do
- 	printf -v now '%(%s)T' -1
-#	curl -s --get --data 'num=100' \
-#	  "http://c4s.torontopolice.on.ca/arcgis/rest/services/CADPublic/C4S/MapServer/0/query?f=json&where=1"%"3D1&returnGeometry=true&spatialRel=esriSpatialRelIntersects&outFields=ATSCENE_TS"%"2CDGROUP"%"2CTYP_ENG"%"2CXSTREETS"%"2COBJECTID"
-	fn=${now}-$$
-	curl -vvv \
-	  --fail \
-	  --dump-header "${fn}.headers" \
-	  --output "${fn}.json" \
-	  --stderr "${fn}.log" \
-	  --header "If-None-Match: $etag" \
-	  --get \
-	  --data 'num=100' \
-	  --data 'f=json' \
-	  --data 'returnGeometry=true' \
-	  --data 'spatialRel=esriSpatialRelIntersects' \
-	  --data-urlencode 'where=1=1' \
-	  --data-urlencode 'outFields=ATSCENE_TS,DGROUP,TYP_ENG,XSTREETS,OBJECTID' \
-	  "http://c4s.torontopolice.on.ca/arcgis/rest/services/CADPublic/C4S/MapServer/0/query"
-	ret=$?
-	printf '%s\n' "$ret" >> "${fn}.ret"
-	printf -v aft '%(%s)T' -1
-	if (((aft-now) > sleep)); then
-		sleep "$sleep"
-	elif ((0 == (aft-now))); then
-		sleep "$sleep"
-	else
-		sleep $((sleep - (aft-now)))
-	fi
-#	if ((0 != ret)); then
-#		etag=''
-#	else
-#		etag="$( \
-#		  dos2unix < "${fn}.headers" | \
-#		  awk -v prev_etag="$etag" \
-#		  'match($0, /^ETag: /) {
-#			etag = substr($0,RSTART+RLENGTH)
-#		  }
-#		  END {
-#			print etag ? etag : prev_etag
-#		  }'
-#		)"
-#	fi
-done
+opts_curl=( \
+  '-vvv'
+  '--fail'
+)
+
+opts_tps=( \
+  '--url'  'https://c4s.torontopolice.on.ca/arcgis/rest/services/CADPublic/C4S/MapServer/0/query'
+  '--get'
+  '--data' 'num=1000'
+  '--data' 'f=json'
+  '--data' 'returnGeometry=true'
+  '--data' 'spatialRel=esriSpatialRelIntersects'
+  '--data-urlencode' 'where=1=1'
+  '--data-urlencode' 'outFields=ATSCENE_TS,DGROUP,TYP_ENG,XSTREETS,OBJECTID,Shape'
+)
+
+if [[ ! -d $dir_data ]]; then
+	exit 1
+fi
+
+printf -v now '%(%s)T' -1
+dstdir=${dir_data}/${now}-$$-${RANDOM}
+tmpdir=${dstdir}${tmp_suff}
+
+mkdir -- "$tmpdir" || exit 2
+
+opts_ephemeral=( \
+  '--dump-header' "${tmpdir}/${fn}.headers"
+  '--output'      "${tmpdir}/${fn}.json"
+  '--stderr'      "${tmpdir}/${fn}.log"
+)
+
+curl "${opts_curl[@]}" "${opts_tps[@]}" "${opts_ephemeral[@]}"
+printf '%s\n' "$?" >> "${tmpdir}/${fn}.ret"
+
+mv -- "$tmpdir" "$dstdir" || exit 3
