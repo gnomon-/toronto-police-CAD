@@ -1,0 +1,51 @@
+#!/bin/bash
+
+declare -i now aft ret sleep
+declare    fn # etag
+
+sleep=$((60 * 1))
+
+while true ; do
+ 	printf -v now '%(%s)T' -1
+#	curl -s --get --data 'num=100' \
+#	  "http://c4s.torontopolice.on.ca/arcgis/rest/services/CADPublic/C4S/MapServer/0/query?f=json&where=1"%"3D1&returnGeometry=true&spatialRel=esriSpatialRelIntersects&outFields=ATSCENE_TS"%"2CDGROUP"%"2CTYP_ENG"%"2CXSTREETS"%"2COBJECTID"
+	fn=${now}-$$
+	curl -vvv \
+	  --fail \
+	  --dump-header "${fn}.headers" \
+	  --output "${fn}.json" \
+	  --stderr "${fn}.log" \
+	  --header "If-None-Match: $etag" \
+	  --get \
+	  --data 'num=100' \
+	  --data 'f=json' \
+	  --data 'returnGeometry=true' \
+	  --data 'spatialRel=esriSpatialRelIntersects' \
+	  --data-urlencode 'where=1=1' \
+	  --data-urlencode 'outFields=ATSCENE_TS,DGROUP,TYP_ENG,XSTREETS,OBJECTID' \
+	  "http://c4s.torontopolice.on.ca/arcgis/rest/services/CADPublic/C4S/MapServer/0/query"
+	ret=$?
+	printf '%s\n' "$ret" >> "${fn}.ret"
+	printf -v aft '%(%s)T' -1
+	if (((aft-now) > sleep)); then
+		sleep "$sleep"
+	elif ((0 == (aft-now))); then
+		sleep "$sleep"
+	else
+		sleep $((sleep - (aft-now)))
+	fi
+#	if ((0 != ret)); then
+#		etag=''
+#	else
+#		etag="$( \
+#		  dos2unix < "${fn}.headers" | \
+#		  awk -v prev_etag="$etag" \
+#		  'match($0, /^ETag: /) {
+#			etag = substr($0,RSTART+RLENGTH)
+#		  }
+#		  END {
+#			print etag ? etag : prev_etag
+#		  }'
+#		)"
+#	fi
+done
