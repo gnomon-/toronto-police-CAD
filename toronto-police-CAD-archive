@@ -1,0 +1,47 @@
+#!/bin/bash
+
+declare    dir_data archive_fn{,_fmt,_ext}
+declare -i ret verbose ts_{now,select_older} i
+declare -a dirs_{candidate,ts,selected} opts_{tar,compress,rm}
+
+dir_data=/home/gnomon/.toronto-police-CAD
+ts_select_older=$((24 * 60 * 60)) # in seconds
+archive_fn_fmt='toronto-police-CAD-archive-%(%Y%m%d-%H%M%S)T-%d.tar'
+
+opts_tar=(      'tar' '-c' '-f' '-'      )
+opts_compress=( 'pzstd' '-19' '-p4' '-c' )
+opts_rm=(       'rm' '-r'                )
+archive_fn_ext='.zst'
+
+verbose=0
+
+printf -v ts_now '%(%s)T' -1
+printf -v archive_fn "$archive_fn_fmt" "$ts_now" "$$"
+
+if ((verbose > 1)); then
+	opts_tar+=(      '-v' )
+	opts_compress+=( '-v' )
+	opts_rm+=(       '-v' )
+fi
+
+cd "$dir_data" || exit 1
+shopt -s nullglob
+shopt -s extglob
+dirs_candidate=( +([0-9])-+([0-9])-+([0-9]) )
+
+if ((${#dirs_candidate[@]} < 1)) ; then
+	exit 2
+fi
+
+dirs_ts=( $(stat -c '%Y' "${dirs_candidate[@]}") )
+
+for ((i=0; i<${#dirs_ts[@]}; i++)) ; do
+	if ((ts_now - dirs_ts[i] > ts_select_older)) ; then
+		dirs_selected+=( "${dirs_candidate[i]}" )
+	fi
+done
+
+"${opts_tar[@]}" -- "${dirs_selected[@]}" | \
+  "${opts_compress[@]}" > \
+  "${archive_fn}${archive_fn_ext}" && \
+  "${opts_rm[@]}" -- "${dirs_selected[@]}"
